@@ -175,3 +175,62 @@ Return:
         "incident": incident,
         "ai_analysis": ai_response.choices[0].message.content
     }
+@app.get("/ai-incident/{incident_number}")
+def ai_incident_by_number(incident_number: str):
+    instance_url = os.getenv("SERVICENOW_INSTANCE_URL")
+    username = os.getenv("SERVICENOW_USERNAME")
+    password = os.getenv("SERVICENOW_PASSWORD")
+
+    url = (
+        f"{instance_url}/api/now/table/incident"
+        f"?sysparm_query=number={incident_number}"
+        "&sysparm_limit=1"
+        "&sysparm_fields=number,short_description,description,priority,category,state,sys_created_on"
+    )
+
+    response = requests.get(
+        url,
+        auth=(username, password),
+        headers={"Accept": "application/json"}
+    )
+
+    data = response.json()
+
+    if not data.get("result"):
+        return {"error": f"Incident {incident_number} not found"}
+
+    incident = data["result"][0]
+
+    prompt = f"""
+You are a ServiceNow ITSM AI Incident Copilot.
+
+Analyze this ServiceNow incident:
+
+Number: {incident.get("number")}
+Short Description: {incident.get("short_description")}
+Description: {incident.get("description")}
+Priority: {incident.get("priority")}
+Category: {incident.get("category")}
+State: {incident.get("state")}
+Created: {incident.get("sys_created_on")}
+
+Return:
+1. Incident summary
+2. Business impact
+3. Urgency explanation
+4. First 3 troubleshooting steps
+5. Suggested assignment group
+"""
+
+    ai_response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an expert ServiceNow ITSM support analyst."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return {
+        "incident": incident,
+        "ai_analysis": ai_response.choices[0].message.content
+    }
