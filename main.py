@@ -27,9 +27,9 @@ def home():
 
 @app.get("/check-env")
 def check_env():
-    openai_key = os.getenv("OPENAI_API_KEY")
     return {
-        "openai_key_loaded": bool(openai_key)
+        "openai_key_loaded": bool(os.getenv("OPENAI_API_KEY")),
+        "servicenow_url_loaded": bool(os.getenv("SERVICENOW_INSTANCE_URL"))
     }
 
 
@@ -42,10 +42,7 @@ def ai_test():
             {"role": "user", "content": "Summarize what an incident copilot should do in one sentence."}
         ]
     )
-
-    return {
-        "ai_response": response.choices[0].message.content
-    }
+    return {"ai_response": response.choices[0].message.content}
 
 
 @app.post("/summarize-incident")
@@ -100,6 +97,8 @@ def test_servicenow():
         "content_type": response.headers.get("Content-Type"),
         "text_preview": response.text[:500]
     }
+
+
 @app.get("/latest-incident")
 def latest_incident():
     instance_url = os.getenv("SERVICENOW_INSTANCE_URL")
@@ -121,60 +120,17 @@ def latest_incident():
 
     data = response.json()
     return data["result"][0] if data.get("result") else {"message": "No incidents found"}
+
+
 @app.get("/ai-latest-incident")
 def ai_latest_incident():
-    instance_url = os.getenv("SERVICENOW_INSTANCE_URL")
-    username = os.getenv("SERVICENOW_USERNAME")
-    password = os.getenv("SERVICENOW_PASSWORD")
+    latest = latest_incident()
+    if "message" in latest:
+        return latest
 
-    url = (
-        f"{instance_url}/api/now/table/incident"
-        "?sysparm_limit=1"
-        "&sysparm_query=ORDERBYDESCsys_created_on"
-        "&sysparm_fields=number,short_description,description,priority,category,state,sys_created_on"
-    )
+    return analyze_incident_with_ai(latest)
 
-    response = requests.get(
-        url,
-        auth=(username, password),
-        headers={"Accept": "application/json"}
-    )
 
-    incident = response.json()["result"][0]
-
-    prompt = f"""
-You are a ServiceNow ITSM AI Incident Copilot.
-
-Analyze this real ServiceNow incident:
-
-Number: {incident.get("number")}
-Short Description: {incident.get("short_description")}
-Description: {incident.get("description")}
-Priority: {incident.get("priority")}
-Category: {incident.get("category")}
-State: {incident.get("state")}
-Created: {incident.get("sys_created_on")}
-
-Return:
-1. Incident summary
-2. Business impact
-3. Urgency explanation
-4. First 3 troubleshooting steps
-5. Suggested assignment group
-"""
-
-    ai_response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are an expert ServiceNow ITSM support analyst."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return {
-        "incident": incident,
-        "ai_analysis": ai_response.choices[0].message.content
-    }
 @app.get("/ai-incident/{incident_number}")
 def ai_incident_by_number(incident_number: str):
     instance_url = os.getenv("SERVICENOW_INSTANCE_URL")
@@ -200,7 +156,10 @@ def ai_incident_by_number(incident_number: str):
         return {"error": f"Incident {incident_number} not found"}
 
     incident = data["result"][0]
+    return analyze_incident_with_ai(incident)
 
+
+def analyze_incident_with_ai(incident: dict):
     prompt = f"""
 You are a ServiceNow ITSM AI Incident Copilot.
 
@@ -214,12 +173,20 @@ Category: {incident.get("category")}
 State: {incident.get("state")}
 Created: {incident.get("sys_created_on")}
 
+
 Return:
 1. Incident summary
 2. Business impact
 3. Urgency explanation
 4. First 3 troubleshooting steps
 5. Suggested assignment group
+6. Major incident assessment
+7. Suggested knowledge articles
+
+For suggested knowledge articles:
+- Recommend 3 possible KB article titles that would help resolve this incident.
+- Explain why each article would help.
+- If no exact article is known, suggest realistic article titles that the IT team should create.
 """
 
     ai_response = client.chat.completions.create(
