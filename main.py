@@ -29,7 +29,9 @@ def home():
 def check_env():
     return {
         "openai_key_loaded": bool(os.getenv("OPENAI_API_KEY")),
-        "servicenow_url_loaded": bool(os.getenv("SERVICENOW_INSTANCE_URL"))
+        "servicenow_url_loaded": bool(os.getenv("SERVICENOW_INSTANCE_URL")),
+        "servicenow_username_loaded": bool(os.getenv("SERVICENOW_USERNAME")),
+        "servicenow_password_loaded": bool(os.getenv("SERVICENOW_PASSWORD")),
     }
 
 
@@ -39,9 +41,10 @@ def ai_test():
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are an IT support assistant."},
-            {"role": "user", "content": "Summarize what an incident copilot should do in one sentence."}
-        ]
+            {"role": "user", "content": "Summarize what an incident copilot should do in one sentence."},
+        ],
     )
+
     return {"ai_response": response.choices[0].message.content}
 
 
@@ -68,13 +71,13 @@ Return:
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful ServiceNow ITSM assistant."},
-            {"role": "user", "content": prompt}
-        ]
+            {"role": "user", "content": prompt},
+        ],
     )
 
     return {
         "incident_number": incident.number,
-        "ai_summary": response.choices[0].message.content
+        "ai_summary": response.choices[0].message.content,
     }
 
 
@@ -89,13 +92,14 @@ def test_servicenow():
     response = requests.get(
         url,
         auth=(username, password),
-        headers={"Accept": "application/json"}
+        headers={"Accept": "application/json"},
+        timeout=30,
     )
 
     return {
         "status_code": response.status_code,
         "content_type": response.headers.get("Content-Type"),
-        "text_preview": response.text[:500]
+        "text_preview": response.text[:500],
     }
 
 
@@ -115,7 +119,8 @@ def latest_incident():
     response = requests.get(
         url,
         auth=(username, password),
-        headers={"Accept": "application/json"}
+        headers={"Accept": "application/json"},
+        timeout=30,
     )
 
     data = response.json()
@@ -124,11 +129,13 @@ def latest_incident():
 
 @app.get("/ai-latest-incident")
 def ai_latest_incident():
-    latest = latest_incident()
-    if "message" in latest:
-        return latest
+    incident = latest_incident()
 
-    return analyze_incident_with_ai(latest)
+    if "message" in incident:
+        return incident
+
+    kb_articles = search_knowledge_articles(incident)
+    return analyze_incident_with_ai(incident, kb_articles)
 
 
 @app.get("/ai-incident/{incident_number}")
@@ -147,7 +154,8 @@ def ai_incident_by_number(incident_number: str):
     response = requests.get(
         url,
         auth=(username, password),
-        headers={"Accept": "application/json"}
+        headers={"Accept": "application/json"},
+        timeout=30,
     )
 
     data = response.json()
@@ -156,10 +164,44 @@ def ai_incident_by_number(incident_number: str):
         return {"error": f"Incident {incident_number} not found"}
 
     incident = data["result"][0]
-    return analyze_incident_with_ai(incident)
+    kb_articles = search_knowledge_articles(incident)
+
+    return analyze_incident_with_ai(incident, kb_articles)
 
 
-def analyze_incident_with_ai(incident: dict):
+def search_knowledge_articles(incident: dict):
+    instance_url = os.getenv("SERVICENOW_INSTANCE_URL")
+    username = os.getenv("SERVICENOW_USERNAME")
+    password = os.getenv("SERVICENOW_PASSWORD")
+
+    search_text = (
+        incident.get("short_description")
+        or incident.get("category")
+        or ""
+    )
+
+    url = (
+        f"{instance_url}/api/now/table/kb_knowledge"
+        f"?sysparm_query=workflow_state=published^short_descriptionLIKE{search_text}"
+        "&sysparm_limit=3"
+        "&sysparm_fields=number,short_description,text,sys_id"
+    )
+
+    response = requests.get(
+        url,
+        auth=(username, password),
+        headers={"Accept": "application/json"},
+        timeout=30,
+    )
+
+    data = response.json()
+    return data.get("result", [])
+
+
+def analyze_incident_with_ai(incident: dict, kb_articles=None):
+    if kb_articles is None:
+        kb_articles = []
+
     prompt = f"""
 You are a ServiceNow ITSM AI Incident Copilot.
 
@@ -173,6 +215,8 @@ Category: {incident.get("category")}
 State: {incident.get("state")}
 Created: {incident.get("sys_created_on")}
 
+ServiceNow Knowledge Articles Found:
+{kb_articles}
 
 Return:
 1. Incident summary
@@ -181,23 +225,33 @@ Return:
 4. First 3 troubleshooting steps
 5. Suggested assignment group
 6. Major incident assessment
-7. Suggested knowledge articles
+7. Relevant ServiceNow knowledge articles
 
-For suggested knowledge articles:
-- Recommend 3 possible KB article titles that would help resolve this incident.
-- Explain why each article would help.
-- If no exact article is known, suggest realistic article titles that the IT team should create.
+Major incident rule:
+- If Priority is 1, treat it as a potential major incident.
+- Explain why it may qualify.
+- Recommend escalation actions.
+- Recommend communication actions.
+- Recommend whether to notify incident manager or major incident team.
+- If Priority is not 1, explain why it may not qualify as a major incident.
+
+For Relevant ServiceNow knowledge articles:
+- Use the ServiceNow Knowledge Articles Found list.
+- If articles are found, mention their KB number and title.
+- Explain how each article may help.
+- If no articles are found, say no matching published ServiceNow KB articles were found and recommend article titles the team should create.
 """
 
     ai_response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are an expert ServiceNow ITSM support analyst."},
-            {"role": "user", "content": prompt}
-        ]
+            {"role": "user", "content": prompt},
+        ],
     )
 
     return {
         "incident": incident,
-        "ai_analysis": ai_response.choices[0].message.content
+        "kb_articles_found": kb_articles,
+        "ai_analysis": ai_response.choices[0].message.content,
     }
