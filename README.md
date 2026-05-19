@@ -1,90 +1,140 @@
-\# ServiceNow AI Incident Copilot
+# ServiceNow AI Incident Copilot
 
+## Overview
+AI-powered ServiceNow Incident Management assistant that analyzes incidents and writes structured guidance into Work Notes.
 
+This project integrates:
 
-An AI-powered ITSM assistant that connects to ServiceNow incidents, sends incident details to OpenAI, and returns a clear support analysis for IT teams.
+- ServiceNow Incident Management
+- FastAPI backend
+- OpenAI API
+- Render cloud deployment
+- ServiceNow UI Action
+- GlideAjax Script Include
+- Knowledge Base retrieval
+- Major incident assessment
 
+## Business Use Case
+Service desk and ITSM teams spend time manually reviewing incidents, identifying impact, recommending troubleshooting steps, and deciding escalation paths.
 
+This assistant accelerates incident triage by generating:
 
-\## What It Does
+- incident summary
+- business impact
+- urgency explanation
+- troubleshooting steps
+- assignment group recommendation
+- major incident assessment
+- knowledge article recommendations
+- resolution notes draft
 
+---
 
+## Architecture
 
-\- Connects to a ServiceNow Personal Developer Instance
+ServiceNow Incident Record  
+↓  
+UI Action: Analyze with AI  
+↓  
+GlideAjax Script Include  
+↓  
+FastAPI REST API on Render  
+↓  
+ServiceNow Incident + Knowledge API  
+↓  
+OpenAI Analysis Engine  
+↓  
+Structured JSON Response  
+↓  
+ServiceNow Work Notes  
 
-\- Retrieves the latest incident from the Incident table
+---
 
-\- Uses OpenAI to analyze the incident
+## API Endpoints
 
-\- Returns:
+### Health Check
+GET /
 
-&#x20; - Incident summary
+### Exact Incident AI Analysis
+GET /ai-incident/{incident_number}
 
-&#x20; - Business impact
+Example:
 
-&#x20; - Urgency explanation
+/ai-incident/INC0010034
 
-&#x20; - Troubleshooting steps
+Returns structured AI analysis for a specific ServiceNow incident.
 
-&#x20; - Suggested assignment group
+---
 
+## Key Features
 
+- Exact incident lookup
+- Priority-aware analysis
+- Major incident detection for Priority 1
+- Knowledge article retrieval foundation
+- Clean Work Notes formatting
+- Cloud-hosted backend
+- Secure environment variables
 
-\## Tech Stack
+---
 
+## Tech Stack
 
+- Python
+- FastAPI
+- OpenAI API
+- ServiceNow REST API
+- GlideAjax
+- RESTMessageV2
+- Render
+- GitHub
 
-\- Python
+---
 
-\- FastAPI
+## ServiceNow Components
 
-\- OpenAI API
+### UI Action
+Incident [incident]
 
-\- ServiceNow REST API
+Button:
 
-\- Swagger UI
+Analyze with AI
 
-\- Git / GitHub
+### Script Include
+AIIncidentCopilotAjax
 
+### Output
+Writes AI analysis into Incident Work Notes.
 
+---
 
-\## Current MVP Features
+## Deployment
 
+Hosted on Render.
 
+Environment variables:
 
-\- `/check-env` — verifies API key loading
+OPENAI_API_KEY  
+SERVICENOW_INSTANCE_URL  
+SERVICENOW_USERNAME  
+SERVICENOW_PASSWORD  
 
-\- `/ai-test` — tests OpenAI connection
+---
 
-\- `/summarize-incident` — summarizes a sample incident
+## Portfolio Value
 
-\- `/test-servicenow` — tests ServiceNow REST connection
+Demonstrates:
 
-\- `/latest-incident` — retrieves latest ServiceNow incident
+- ServiceNow development
+- ITSM automation
+- AI integration
+- major incident intelligence
+- REST API development
+- cloud deployment
+- enterprise workflow automation
 
-\- `/ai-latest-incident` — analyzes latest ServiceNow incident with AI
+---
 
+## Author
 
-
-\## Security
-
-
-
-Secrets are stored in `.env` and excluded from GitHub using `.gitignore`.
-
-
-
-Example `.env`:
-
-
-
-```env
-
-OPENAI\_API\_KEY=your\_key\_here
-
-SERVICENOW\_INSTANCE\_URL=https://your-instance.service-now.com
-
-SERVICENOW\_USERNAME=your\_username
-
-SERVICENOW\_PASSWORD=your\_password
-
+Joseph Mwangi
